@@ -81,3 +81,20 @@ ollama pull llama3.2
 - RAG 知识片段：`data/knowledge/*.md`。
 
 详细设计见 `Design/Design.md`。
+
+## 推送到 GitHub 与队友协作
+
+本目录已是**独立 Git 仓库**（勿在用户主目录执行 `git add`，应在 `MedAi` 根目录操作）。
+
+1. 在 GitHub 新建空仓库（不要勾选「自动添加 README」，避免首次推送冲突）。  
+2. 本地执行（将 URL 换成你的仓库）：
+
+```powershell
+cd C:\Users\Xile\.vscode\.code\MedAi
+git remote add origin https://github.com/你的用户名/仓库名.git
+git push -u origin main
+```
+
+3. 队友克隆后：复制 `.env.example` 为 `.env` 并自行填写 `DEEPSEEK_API_KEY`；勿将 `.env` 提交到 Git。
+
+首次登录 GitHub 若提示认证，可使用 **Personal Access Token** 代替密码，或配置 **Git Credential Manager**。
