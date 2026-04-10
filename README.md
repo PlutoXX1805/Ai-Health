@@ -87,13 +87,17 @@ ollama pull llama3.2
 本目录已是**独立 Git 仓库**（勿在用户主目录执行 `git add`，应在 `MedAi` 根目录操作）。
 
 1. 在 GitHub 新建空仓库（不要勾选「自动添加 README」，避免首次推送冲突）。  
-2. 本地执行（将 URL 换成你的仓库）：
+2. 本地执行（将 URL 换成你的仓库；主分支为 **`main`**）：
 
 ```powershell
 cd C:\Users\Xile\.vscode\.code\MedAi
 git remote add origin https://github.com/你的用户名/仓库名.git
 git push -u origin main
 ```
+
+若 GitHub 创建仓库时自动生成了 `main`（仅含 README），首次推送可能被拒绝，可先执行  
+`git pull origin main --rebase --allow-unrelated-histories` 再 `git push -u origin main`，或在确认无重要远程内容后使用  
+`git push -u origin main --force-with-lease` 用本地项目覆盖远程 `main`。
 
 3. 队友克隆后：复制 `.env.example` 为 `.env` 并自行填写 `DEEPSEEK_API_KEY`；勿将 `.env` 提交到 Git。
 
