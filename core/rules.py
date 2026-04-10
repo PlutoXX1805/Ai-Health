@@ -58,6 +58,9 @@ def flag_labs(items: list[dict[str, Any]]) -> list[LabFlag]:
 DEFAULT_WINDOW = 5
 HR_LOW, HR_HIGH = 45, 140
 SPO2_LOW = 90
+SBP_HIGH = 180
+DBP_HIGH = 110
+GLU_HIGH = 16.7
 
 
 def check_critical_vitals(df: pd.DataFrame) -> tuple[bool, str]:
@@ -88,5 +91,25 @@ def check_critical_vitals(df: pd.DataFrame) -> tuple[bool, str]:
             ox_tail = ox.tail(DEFAULT_WINDOW)
             if (ox_tail < SPO2_LOW).all():
                 return True, f"血氧连续 {DEFAULT_WINDOW} 次低于 {SPO2_LOW}%（演示规则）"
+
+    if "systolic_bp" in df.columns and "diastolic_bp" in df.columns:
+        sbp = pd.to_numeric(df["systolic_bp"], errors="coerce").dropna()
+        dbp = pd.to_numeric(df["diastolic_bp"], errors="coerce").dropna()
+        m = min(len(sbp), len(dbp))
+        if m >= DEFAULT_WINDOW:
+            sbp_t = sbp.tail(DEFAULT_WINDOW)
+            dbp_t = dbp.tail(DEFAULT_WINDOW)
+            if ((sbp_t > SBP_HIGH) & (dbp_t > DBP_HIGH)).all():
+                return (
+                    True,
+                    f"血压连续 {DEFAULT_WINDOW} 次高于 {SBP_HIGH}/{DBP_HIGH} mmHg（演示规则，非高血压急症判定）",
+                )
+
+    if "glucose_mmol" in df.columns:
+        glu = pd.to_numeric(df["glucose_mmol"], errors="coerce").dropna()
+        if len(glu) >= DEFAULT_WINDOW:
+            g_tail = glu.tail(DEFAULT_WINDOW)
+            if (g_tail > GLU_HIGH).all():
+                return True, f"血糖连续 {DEFAULT_WINDOW} 次高于 {GLU_HIGH} mmol/L（演示规则，请线下就医）"
 
     return False, ""

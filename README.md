@@ -1,6 +1,6 @@
 # 嗨 Hai（Hai）
 
-医学人工智能课程演示项目：本地 Streamlit + SQLite + 轻量 RAG + 规则化体征预警；大模型默认 **DeepSeek API**（OpenAI 兼容），可选 [Ollama](https://ollama.com/) 作为回退。
+医学人工智能课程项目：**嗨 Hai** 本地健康助手 — Streamlit + SQLite + 轻量 RAG + 体征规则预警；智能分析通过 **DeepSeek API**（OpenAI 兼容）提供服务。
 
 ## DeepSeek API（推荐）
 
@@ -63,16 +63,6 @@ gatherUsageStats = false
 ```
 
 界面主题与布局参考 UI/UX Pro Max 中 **Wellness / Soft UI** 方向（医疗绿、浅底、卡片化指标），见 `.streamlit/config.toml` 与 `core/ui_styles.py`。
-
-## 可选：Ollama（回退）
-
-安装 Ollama 后执行例如：
-
-```bash
-ollama pull llama3.2
-```
-
-默认连接 `http://127.0.0.1:11434`，模型名 `llama3.2`。可通过环境变量 `OLLAMA_HOST`、`OLLAMA_MODEL` 修改。
 
 ## 数据说明
 

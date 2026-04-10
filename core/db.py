@@ -53,8 +53,29 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             payload_json TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS daily_wellness_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            payload_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
         """
     )
+    conn.commit()
+    _migrate_profile(conn)
+
+
+def _migrate_profile(conn: sqlite3.Connection) -> None:
+    cur = conn.execute("PRAGMA table_info(profile)")
+    cols = {row[1] for row in cur.fetchall()}
+    alters = [
+        ("diet_preferences", "ALTER TABLE profile ADD COLUMN diet_preferences TEXT"),
+        ("medical_history", "ALTER TABLE profile ADD COLUMN medical_history TEXT"),
+        ("exercise_preferences", "ALTER TABLE profile ADD COLUMN exercise_preferences TEXT"),
+    ]
+    for name, stmt in alters:
+        if name not in cols:
+            conn.execute(stmt)
     conn.commit()
 
 
@@ -73,21 +94,40 @@ def upsert_profile(
     age: int | None,
     sex: str | None,
     display_name: str | None,
+    diet_preferences: str | None = None,
+    medical_history: str | None = None,
+    exercise_preferences: str | None = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     conn.execute(
         """
-        INSERT INTO profile (id, height_cm, weight_kg, age, sex, display_name, updated_at)
-        VALUES (1, ?, ?, ?, ?, ?, ?)
+        INSERT INTO profile (
+            id, height_cm, weight_kg, age, sex, display_name,
+            diet_preferences, medical_history, exercise_preferences, updated_at
+        )
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             height_cm = excluded.height_cm,
             weight_kg = excluded.weight_kg,
             age = excluded.age,
             sex = excluded.sex,
             display_name = excluded.display_name,
+            diet_preferences = excluded.diet_preferences,
+            medical_history = excluded.medical_history,
+            exercise_preferences = excluded.exercise_preferences,
             updated_at = excluded.updated_at
         """,
-        (height_cm, weight_kg, age, sex, display_name, now),
+        (
+            height_cm,
+            weight_kg,
+            age,
+            sex,
+            display_name,
+            diet_preferences,
+            medical_history,
+            exercise_preferences,
+            now,
+        ),
     )
     conn.commit()
 
@@ -152,3 +192,32 @@ def insert_vitals_snapshot(conn: sqlite3.Connection, label: str, payload: dict[s
         (label, json.dumps(payload, ensure_ascii=False), now),
     )
     conn.commit()
+
+
+def insert_daily_wellness_log(conn: sqlite3.Connection, payload: dict[str, Any]) -> int:
+    """保存「昨日回顾」快照，供总览图表读取。"""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    cur = conn.execute(
+        "INSERT INTO daily_wellness_log (payload_json, created_at) VALUES (?, ?)",
+        (json.dumps(payload, ensure_ascii=False), now),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_daily_wellness_logs(conn: sqlite3.Connection, limit: int = 14) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT id, payload_json, created_at FROM daily_wellness_log
+        ORDER BY id DESC LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        p = json.loads(r["payload_json"])
+        p["_log_id"] = r["id"]
+        p["_created_at"] = r["created_at"]
+        p["_date_label"] = (r["created_at"] or "")[:10].replace("T", " ")[:10]
+        out.append(p)
+    return out

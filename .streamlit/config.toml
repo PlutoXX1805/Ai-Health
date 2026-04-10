@@ -2,6 +2,10 @@
 [browser]
 gatherUsageStats = false
 
+# 尽量弱化顶部工具条（Deploy 等仍可能由 CSS 彻底隐藏）
+[client]
+toolbarMode = "minimal"
+
 [server]
 headless = false
 # Windows 上 Hyper-V/WSL 等常保留 8441–8640，8510/8520/8601 会绑定失败，须用区间外端口
@@ -11,7 +15,8 @@ address = "127.0.0.1"
 # 嗨 Hai：健康类 Web 面板 — Soft UI + 医疗绿主色（参考 UI/UX Pro Max：wellness / 避免霓虹与强渐变）
 [theme]
 primaryColor = "#1b6b4a"
-backgroundColor = "#f4faf7"
+backgroundColor = "#f0faf4"
 secondaryBackgroundColor = "#ffffff"
-textColor = "#1a2e26"
+textColor = "#0d2818"
 font = "sans serif"
+base = "light"

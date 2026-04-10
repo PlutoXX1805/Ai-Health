@@ -1,4 +1,4 @@
-"""大模型调用：优先 DeepSeek API；其次 Ollama；最后模板回复。密钥仅允许来自环境变量 / .env，禁止写入代码库。"""
+"""大模型调用：DeepSeek API（OpenAI 兼容）；密钥来自环境变量 / .env，勿写入代码库。"""
 
 from __future__ import annotations
 
@@ -13,9 +13,6 @@ from dotenv import load_dotenv
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
-DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-DEFAULT_OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
-
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
 DEEPSEEK_API_BASE = os.environ.get("DEEPSEEK_API_BASE", "https://api.deepseek.com").rstrip("/")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
@@ -27,23 +24,26 @@ SYSTEM_PROMPT = """你是「嗨 Hai」健康科普助手，面向大众做生活
 3. 回答简洁、分点列出；语气友好专业。
 4. 结尾不要重复免责声明全文（界面会单独展示）。"""
 
+PLAN_GENERATOR_SYSTEM = """你是「嗨 Hai」明日生活规划助手。你的任务是：仅根据用户提供的【个人档案】【昨日回顾】与【公式参考 JSON】，生成针对「明天」一整天的整合建议。
+
+输出要求（Markdown）：
+- 必须使用二级标题组织，且至少包含：「明日饮食建议」「营养素与热量参考」「有氧与力量训练」「步数与日常活动」「作息与疗养提醒（非医疗）」。
+- 饮食：给出明日三餐原则、推荐食物类别与示例搭配；结合用户忌口与饮食偏好（来自档案），不要建议其明确忌口的食物。
+- 营养素：引用 JSON 中的估算数字作为参考区间，并强调个体差异与需营养师/医生个体化评估。
+- 运动：区分有氧与力量/无氧；结合用户运动偏好与昨日完成情况，安排明日可执行强度与时长（科普级，非运动处方）。
+- 步数：结合昨日步数与整体活动水平，给出明日步数与碎片化活动建议。
+- 疗养：结合病史做生活习惯与复诊提醒，禁止诊断、禁止推荐具体药物或剂量。
+
+语气：专业、克制、友好。不写完整免责声明段落（界面会单独展示）。"""
+
 
 def deepseek_configured() -> bool:
     return bool(DEEPSEEK_API_KEY)
 
 
-def _ollama_available(base: str = DEFAULT_OLLAMA_URL, timeout: float = 2.0) -> bool:
-    try:
-        r = requests.get(f"{base.rstrip('/')}/api/tags", timeout=timeout)
-        return r.status_code == 200
-    except requests.RequestException:
-        return False
-
-
 def _call_deepseek(messages: list[dict[str, str]]) -> tuple[str | None, str | None]:
-    """成功返回 (content, None)，失败返回 (None, error_message)。"""
     if not DEEPSEEK_API_KEY:
-        return None, "未配置 DEEPSEEK_API_KEY"
+        return None, "服务暂不可用"
     url = f"{DEEPSEEK_API_BASE}/v1/chat/completions"
     try:
         resp = requests.post(
@@ -72,26 +72,6 @@ def _call_deepseek(messages: list[dict[str, str]]) -> tuple[str | None, str | No
         return None, str(e)
 
 
-def _call_ollama(
-    messages: list[dict[str, str]],
-    model: str,
-) -> tuple[str | None, str | None]:
-    base = DEFAULT_OLLAMA_URL.rstrip("/")
-    try:
-        resp = requests.post(
-            f"{base}/api/chat",
-            json={"model": model, "messages": messages, "stream": False},
-            timeout=120,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        text = (data.get("message") or {}).get("content") or ""
-        text = text.strip()
-        return (text, None) if text else (None, "空响应")
-    except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
-        return None, str(e)
-
-
 def chat(
     user_text: str,
     *,
@@ -99,11 +79,7 @@ def chat(
     history: list[dict[str, str]] | None = None,
     model: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """
-    返回 (回复文本, 元信息)。
-    meta: provider deepseek | ollama | mock, model, error
-    """
-    ollama_model = model or DEFAULT_OLLAMA_MODEL
+    del model  # 固定使用 DEEPSEEK_MODEL
     messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     if context:
         messages.append(
@@ -123,38 +99,8 @@ def chat(
     if deepseek_configured():
         text, err = _call_deepseek(messages)
         if text:
-            return text, {
-                "provider": "deepseek",
-                "model": DEEPSEEK_MODEL,
-                "error": None,
-                "used_ollama": False,
-                "used_deepseek": True,
-            }
-        # DeepSeek 失败则尝试 Ollama，再退回 mock
-        if _ollama_available():
-            ot, oe = _call_ollama(messages, ollama_model)
-            if ot:
-                return ot, {
-                    "provider": "ollama",
-                    "model": ollama_model,
-                    "error": None,
-                    "used_ollama": True,
-                    "used_deepseek": False,
-                }
-        return _mock_reply(user_text, context, err or "DeepSeek 调用失败")
-
-    base = DEFAULT_OLLAMA_URL.rstrip("/")
-    if _ollama_available(base):
-        text, err = _call_ollama(messages, ollama_model)
-        if text:
-            return text, {
-                "provider": "ollama",
-                "model": ollama_model,
-                "error": None,
-                "used_ollama": True,
-                "used_deepseek": False,
-            }
-        return _mock_reply(user_text, context, err)
+            return text, _meta_ok("deepseek", DEEPSEEK_MODEL)
+        return _mock_reply(user_text, context, err or "服务暂不可用")
 
     return _mock_reply(user_text, context, None)
 
@@ -162,12 +108,9 @@ def chat(
 def _mock_reply(user_text: str, context: str | None, err: str | None) -> tuple[str, dict[str, Any]]:
     hint = ""
     if err:
-        hint = f"（大模型不可用：{err}，以下为离线模板回复。）\n\n"
-    elif not deepseek_configured() and not _ollama_available():
-        hint = (
-            "（未配置 DEEPSEEK_API_KEY 且未检测到 Ollama，当前为离线模板回复。"
-            "可在项目根目录创建 .env 并设置 DEEPSEEK_API_KEY。）\n\n"
-        )
+        hint = "（当前为离线说明模式。）\n\n"
+    elif not deepseek_configured():
+        hint = "（当前为离线说明模式。）\n\n"
 
     kb = (context or "").strip()
     lines = [
@@ -185,19 +128,74 @@ def _mock_reply(user_text: str, context: str | None, err: str | None) -> tuple[s
         "provider": "mock",
         "model": None,
         "error": err,
-        "used_ollama": False,
         "used_deepseek": False,
     }
     return "\n".join(lines), meta
 
 
-def polish_plan(plan_markdown: str) -> tuple[str, dict[str, Any]]:
-    """将结构化计划交给 LLM 润色；失败则原文返回。"""
-    prompt = (
-        "请将下列「一日健康计划要点」改写为更易读的中文段落，保留数字与比例，不添加新的医疗承诺：\n\n"
-        + plan_markdown
-    )
-    text, meta = chat(prompt, context=None, history=None)
-    if meta.get("provider") in ("deepseek", "ollama"):
-        return text, meta
-    return plan_markdown, meta
+def _meta_ok(provider: str, model: str | None) -> dict[str, Any]:
+    return {
+        "provider": provider,
+        "model": model,
+        "error": None,
+        "used_deepseek": provider == "deepseek",
+    }
+
+
+def generate_tomorrow_plan(
+    *,
+    profile_markdown: str,
+    yesterday_markdown: str,
+    reference: dict[str, Any],
+    rag_context: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    chunks = [
+        "请直接输出明日规划（Markdown）。",
+        "",
+        "### 公式参考（仅供对齐数量级）",
+        "```json\n" + json.dumps(reference, ensure_ascii=False, indent=2) + "\n```",
+        "",
+        "### 个人档案",
+        profile_markdown.strip() or "（未填写）",
+        "",
+        "### 昨日回顾（用于推导明日安排）",
+        yesterday_markdown.strip() or "（未填写）",
+    ]
+    if rag_context and rag_context.strip():
+        chunks.extend(["", "### 知识库摘录", rag_context.strip()])
+    user_msg = "\n".join(chunks)
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": PLAN_GENERATOR_SYSTEM},
+        {"role": "user", "content": user_msg},
+    ]
+
+    if deepseek_configured():
+        text, err = _call_deepseek(messages)
+        if text:
+            return text, _meta_ok("deepseek", DEEPSEEK_MODEL)
+        return _fallback_plan(reference, err or "服务暂不可用")
+
+    return _fallback_plan(reference, None)
+
+
+def _fallback_plan(reference: dict[str, Any], err: str | None) -> tuple[str, dict[str, Any]]:
+    hint = "> 当前为离线说明模式，展示公式估算摘要。\n\n" if err or not deepseek_configured() else ""
+
+    body = [
+        "## 营养素与热量参考（公式估算）",
+        f"- 建议明日可参考总能量约 **{reference.get('suggested_intake_kcal_next_day_estimate', '—')} kcal**（个体差异常大）。",
+        f"- 三大营养素可参考：{reference.get('macro_grams_suggestion_estimate', {})}。",
+        "",
+        "## 明日饮食与运动",
+        "- 联网智能分析恢复后，可生成个性化三餐与有氧/力量安排。",
+        "",
+        "## 作息与疗养提醒（非医疗）",
+        "- 慢性问题或不适请及时就诊。",
+    ]
+    meta: dict[str, Any] = {
+        "provider": "mock",
+        "model": None,
+        "error": err,
+        "used_deepseek": False,
+    }
+    return hint + "\n".join(body), meta
