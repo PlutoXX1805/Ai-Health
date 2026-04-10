@@ -1,0 +1,17 @@
+# 项目内配置会覆盖用户目录下的全局 Streamlit 配置（避免误用已被占用的端口等）
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = false
+# Windows 上 Hyper-V/WSL 等常保留 8441–8640，8510/8520/8601 会绑定失败，须用区间外端口
+port = 8860
+address = "127.0.0.1"
+
+# 嗨 Hai：健康类 Web 面板 — Soft UI + 医疗绿主色（参考 UI/UX Pro Max：wellness / 避免霓虹与强渐变）
+[theme]
+primaryColor = "#1b6b4a"
+backgroundColor = "#f4faf7"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1a2e26"
+font = "sans serif"

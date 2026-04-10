@@ -1,0 +1,11 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+*.sqlite
+*.sqlite3
+.streamlit/secrets.toml
+
+# 完整上游仓库克隆（技能本体已复制到 .cursor/skills/ui-ux-pro-max/）
+.cursor/skills/ui-ux-pro-max-skill/

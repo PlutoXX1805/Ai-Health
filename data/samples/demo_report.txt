@@ -1,0 +1,12 @@
+（脱敏演示）社区医院生化检验报告摘要
+姓名：演示用户   性别：男   年龄：35岁
+
+丙氨酸氨基转移酶 ALT  118 U/L
+天门冬氨酸氨基转移酶 AST  42 U/L
+总胆红素 TBIL  12 μmol/L
+肌酐 CREA  78 μmol/L
+空腹血糖 GLU  5.4 mmol/L
+总胆固醇 TC  5.8 mmol/L
+甘油三酯 TG  2.1 mmol/L
+高密度脂蛋白 HDL  1.10 mmol/L
+低密度脂蛋白 LDL  3.6 mmol/L
