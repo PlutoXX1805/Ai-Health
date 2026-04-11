@@ -59,6 +59,14 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             payload_json TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            module TEXT NOT NULL,
+            detail_json TEXT,
+            created_at TEXT NOT NULL
+        );
         """
     )
     conn.commit()

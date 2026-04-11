@@ -10,7 +10,7 @@ import importlib
 
 import streamlit as st
 
-from core import dashboard, db, ingest_report, llm_client, rag, recommend, rules, ui_styles, vitals
+from core import dashboard, db, health_score, ingest_report, llm_client, rag, recommend, rules, ui_styles, validators, vitals
 
 # 避免 Streamlit 热重载后仍持有旧版 dashboard（缺少康复路径 API）
 if not hasattr(dashboard, "build_recovery_journey"):
@@ -91,8 +91,8 @@ def _recovery_detail_panel_html(node: dict[str, object], *, is_system_current: b
 def page_overview(conn) -> None:
     st.markdown("### 健康总览")
     st.caption(
-        "饮食营养、运动负荷与康复路径三维度；数据来自「智能档案」、检验摘要、"
-        "「明日规划」已保存的昨日回顾，以及「体征与预警」心率序列（若已加载）。"
+        "综合健康指数、饮食营养、运动负荷与康复路径多维度联动；"
+        "数据来自「智能档案」、检验摘要、「明日规划」昨日回顾，以及「体征与预警」序列。"
     )
     prof = db.get_profile(conn)
     w = float(prof["weight_kg"]) if prof and prof.get("weight_kg") else None
@@ -112,6 +112,58 @@ def page_overview(conn) -> None:
     vdf = st.session_state.get("vitals_df")
     if vdf is None:
         vdf = vitals.load_sample_csv()
+
+    critical, _ = rules.check_critical_vitals(vdf)
+    hi, dims = health_score.compute_health_index(
+        prof=prof,
+        latest_daily=latest_daily,
+        has_lab=has_lab,
+        critical_alert=critical,
+    )
+    bmi_val = health_score.bmi(w or 0, h or 0)
+    bmi_cat = health_score.bmi_category(bmi_val)
+    completeness, missing_fields = health_score.profile_completeness(prof)
+
+    bmi_style = ""
+    if bmi_val > 0:
+        if bmi_val >= 28:
+            bmi_style = "danger"
+        elif bmi_val >= 24:
+            bmi_style = "warn"
+
+    cards = [
+        ui_styles.metric_card("综合健康指数", f"{hi:.0f}", "科普级评估 · 仅供参考"),
+        ui_styles.metric_card(
+            "BMI 体质指数",
+            f"{bmi_val}" if bmi_val > 0 else "—",
+            bmi_cat if bmi_val > 0 else "请在档案填写身高体重",
+            style=bmi_style,
+        ),
+        ui_styles.metric_card(
+            "昨日步数",
+            f"{int(latest_daily.get('steps', 0)):,}" if latest_daily else "—",
+            latest_daily.get("_date_label", "") if latest_daily else "尚无昨日回顾",
+        ),
+        ui_styles.metric_card(
+            "体征预警",
+            "正常" if not critical else "异常",
+            "规则引擎无告警" if not critical else "检测到异常趋势",
+            style="danger" if critical else "",
+        ),
+    ]
+    ui_styles.metric_grid(cards)
+    ui_styles.progress_bar("档案完整度", completeness)
+    if missing_fields and completeness < 100:
+        st.caption(f"还可补充：{'、'.join(missing_fields)}")
+
+    score_row = st.columns(2)
+    with score_row[0]:
+        st.plotly_chart(health_score.fig_health_gauge(hi), use_container_width=True)
+    with score_row[1]:
+        st.plotly_chart(health_score.fig_dimension_bars(dims), use_container_width=True)
+
+    st.markdown("---")
+
     elab, eser, ex_sub = dashboard.exercise_intensity_series(vdf, logs_chrono)
     is_demo_exercise = "演示数据" in ex_sub
 
@@ -225,6 +277,21 @@ def page_overview(conn) -> None:
     elif not has_daily:
         st.info("档案已就绪；在「明日规划」同步昨日回顾后，运动柱图将使用真实记录。")
 
+    with st.expander("操作审计日志（最近 20 条）", expanded=False):
+        try:
+            logs = validators.list_audit_logs(conn, limit=20)
+            if logs:
+                for lg in logs:
+                    st.markdown(
+                        f'<span class="hai-audit-tag">{html.escape(lg["module"])}</span>'
+                        f'{html.escape(lg["action"])} — <small>{lg["created_at"]}</small>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("暂无操作记录。")
+        except Exception:
+            st.caption("审计日志表尚未初始化。")
+
     st.caption("图示均为本地科普级可视化，不能替代诊疗决策。")
     ui_styles.disclaimer_block(DISCLAIMER)
 
@@ -282,18 +349,32 @@ def page_profile(conn) -> None:
             )
             submitted = st.form_submit_button("保存档案", type="primary", use_container_width=True)
             if submitted:
-                db.upsert_profile(
-                    conn,
-                    height_cm=height,
-                    weight_kg=weight,
-                    age=age,
-                    sex=sex,
-                    display_name=name or None,
-                    diet_preferences=diet_pref.strip() or None,
-                    exercise_preferences=exercise_pref.strip() or None,
-                    medical_history=medical_hist.strip() or None,
+                vr = validators.validate_profile(
+                    height_cm=height, weight_kg=weight, age=age, sex=sex,
                 )
-                st.success("已保存到本地数据库。")
+                if not vr.ok:
+                    for e in vr.errors:
+                        st.error(f"校验失败：{e}")
+                else:
+                    for w_msg in vr.warnings:
+                        st.warning(f"提示：{w_msg}")
+                    db.upsert_profile(
+                        conn,
+                        height_cm=height,
+                        weight_kg=weight,
+                        age=age,
+                        sex=sex,
+                        display_name=name or None,
+                        diet_preferences=diet_pref.strip() or None,
+                        exercise_preferences=exercise_pref.strip() or None,
+                        medical_history=medical_hist.strip() or None,
+                    )
+                    validators.write_audit(
+                        conn, action="保存档案",
+                        module="智能档案",
+                        detail={"height_cm": height, "weight_kg": weight, "age": age},
+                    )
+                    st.success("已保存到本地数据库。")
 
     with st.container(border=True):
         st.markdown("##### 紧急联系人")
@@ -344,6 +425,11 @@ def page_profile(conn) -> None:
                         source_name=up.name,
                         raw_text_snippet=result.get("raw_preview") or "",
                         structured=structured,
+                    )
+                    validators.write_audit(
+                        conn, action="上传体检报告",
+                        module="智能档案",
+                        detail={"filename": up.name, "items_count": len(result["items"])},
                     )
                     st.success("检验摘要已存档")
 
@@ -622,8 +708,25 @@ def page_recommend(conn) -> None:
         btn_row = st.columns(2)
         with btn_row[0]:
             if st.button("同步昨日回顾到总览", use_container_width=True, help="不调用大模型，仅把当前表单写入本地并更新总览图表"):
-                db.insert_daily_wellness_log(conn, y_payload)
-                st.toast("已保存，请打开「总览」查看图表更新")
+                vr = validators.validate_vitals_self_report(
+                    body_temp_c=y_payload.get("body_temp_c"),
+                    bp_systolic=y_payload.get("bp_systolic"),
+                    bp_diastolic=y_payload.get("bp_diastolic"),
+                    blood_glucose_mmol=y_payload.get("blood_glucose_mmol"),
+                )
+                if not vr.ok:
+                    for e in vr.errors:
+                        st.error(f"数据校验失败：{e}")
+                else:
+                    for w_msg in vr.warnings:
+                        st.warning(f"健康提示：{w_msg}")
+                    db.insert_daily_wellness_log(conn, y_payload)
+                    validators.write_audit(
+                        conn, action="同步昨日回顾",
+                        module="明日规划",
+                        detail={"steps": y_payload.get("steps")},
+                    )
+                    st.toast("已保存，请打开「总览」查看图表更新")
         with btn_row[1]:
             gen_clicked = st.button("生成明日健康方案（AI）", type="primary", use_container_width=True)
 
@@ -662,6 +765,11 @@ def page_recommend(conn) -> None:
             st.session_state["hai_tomorrow_ref"] = ref
             st.session_state["hai_tomorrow_rag"] = hits
             db.insert_daily_wellness_log(conn, y_payload)
+            validators.write_audit(
+                conn, action="AI 生成明日方案",
+                module="明日规划",
+                detail={"provider": meta.get("provider")},
+            )
             st.toast("方案已生成，昨日回顾已同步至总览")
 
         if st.session_state.get("hai_tomorrow_plan"):
@@ -834,6 +942,7 @@ def main() -> None:
         )
         st.stop()
     conn = get_conn()
+    validators.init_audit_log(conn)
     rag.load_knowledge()
 
     _render_sidebar_brand()

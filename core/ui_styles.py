@@ -361,6 +361,100 @@ def inject_hai_styles() -> None:
     color: var(--hai-green-500);
     margin-bottom: 0.35rem;
   }
+
+  /* === 总览指标卡片网格 === */
+  .hai-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+  }
+  .hai-metric-card {
+    background: linear-gradient(135deg, #ffffff 0%, var(--hai-green-50) 100%);
+    border: 1px solid var(--hai-border);
+    border-radius: var(--hai-radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--hai-shadow-sm);
+    transition: box-shadow var(--hai-duration) var(--hai-ease), transform var(--hai-duration) var(--hai-ease);
+  }
+  .hai-metric-card:hover {
+    box-shadow: var(--hai-shadow-md);
+    transform: translateY(-2px);
+  }
+  .hai-metric-card .mc-label {
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: var(--hai-muted);
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.02em;
+  }
+  .hai-metric-card .mc-value {
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: var(--hai-green-800);
+    line-height: 1.15;
+  }
+  .hai-metric-card .mc-sub {
+    font-size: 0.72rem;
+    color: var(--hai-muted);
+    margin-top: 0.2rem;
+  }
+  .hai-metric-card.mc-warn .mc-value { color: #c9a227; }
+  .hai-metric-card.mc-danger .mc-value { color: #c0392b; }
+
+  /* 档案完整度进度条 */
+  .hai-progress-wrap {
+    margin: 0.5rem 0 0.85rem;
+  }
+  .hai-progress-label {
+    font-size: 0.78rem;
+    color: var(--hai-muted);
+    margin-bottom: 0.25rem;
+  }
+  .hai-progress-bar {
+    height: 8px;
+    border-radius: 99px;
+    background: rgba(27, 107, 74, 0.1);
+    overflow: hidden;
+  }
+  .hai-progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--hai-green-500) 0%, var(--hai-green-700) 100%);
+    transition: width 500ms var(--hai-ease);
+  }
+
+  /* 审计日志标签 */
+  .hai-audit-tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    background: rgba(27, 107, 74, 0.1);
+    color: var(--hai-green-700);
+    margin-right: 0.35rem;
+  }
+
+  /* 验证提示样式 */
+  .hai-validation-warn {
+    font-size: 0.82rem;
+    color: #c9a227;
+    padding: 0.45rem 0.65rem;
+    background: rgba(201, 162, 39, 0.08);
+    border-radius: 8px;
+    border-left: 3px solid #c9a227;
+    margin: 0.35rem 0;
+  }
+  .hai-validation-err {
+    font-size: 0.82rem;
+    color: #c0392b;
+    padding: 0.45rem 0.65rem;
+    background: rgba(192, 57, 43, 0.06);
+    border-radius: 8px;
+    border-left: 3px solid #c0392b;
+    margin: 0.35rem 0;
+  }
 </style>
         """,
         unsafe_allow_html=True,
@@ -371,5 +465,39 @@ def disclaimer_block(text: str) -> None:
     """底部免责声明（带样式类，内容经转义）。"""
     st.markdown(
         f'<p class="hai-disclaimer">{html.escape(text)}</p>',
+        unsafe_allow_html=True,
+    )
+
+
+def metric_card(label: str, value: str, sub: str = "", style: str = "") -> str:
+    cls = "hai-metric-card"
+    if style == "warn":
+        cls += " mc-warn"
+    elif style == "danger":
+        cls += " mc-danger"
+    return (
+        f'<div class="{cls}">'
+        f'<div class="mc-label">{html.escape(label)}</div>'
+        f'<div class="mc-value">{html.escape(value)}</div>'
+        f'<div class="mc-sub">{html.escape(sub)}</div>'
+        "</div>"
+    )
+
+
+def metric_grid(cards: list[str]) -> None:
+    inner = "".join(cards)
+    st.markdown(
+        f'<div class="hai-metric-grid">{inner}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def progress_bar(label: str, pct: float) -> None:
+    pct = max(0.0, min(100.0, pct))
+    st.markdown(
+        f'<div class="hai-progress-wrap">'
+        f'<div class="hai-progress-label">{html.escape(label)} — {pct:.0f}%</div>'
+        f'<div class="hai-progress-bar"><div class="hai-progress-fill" style="width:{pct}%"></div></div>'
+        "</div>",
         unsafe_allow_html=True,
     )

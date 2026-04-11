@@ -33,6 +33,23 @@ streamlit run app.py
 
 浏览器访问终端里打印的地址。本项目默认 **`http://127.0.0.1:8860`**（见 `.streamlit/config.toml`）。
 
+### Windows：`python` 不是内部或外部命令
+
+若 PowerShell 提示找不到 `python`，说明安装时未勾选「Add Python to PATH」。可任选其一：
+
+- 使用 **Python Launcher**：`py -m venv .venv`、`py -m pip install -r requirements.txt`、`py -m streamlit run app.py`
+- 或在「应用执行别名」中关闭 `python.exe` / `python3.exe` 的商店重定向（设置 → 应用 → 应用执行别名）
+
+### 生成设计文档（Word）
+
+需已安装依赖（含 `python-docx`）。在项目根目录执行：
+
+```powershell
+py generate_design_doc.py
+```
+
+或双击运行 `generate_design_doc.bat`。输出：`Design/嗨Hai健康管理系统设计文档.docx`。
+
 ### Windows：提示「Port … is not available」但 netstat 里没有进程
 
 很多机器上 **Hyper-V / WSL / Docker** 会通过系统保留一段 TCP 端口（可用下面命令查看）。常见保留区间会覆盖 **8441–8640**，因此 **8501、8510、8520、8601** 等会**无法绑定**，这不是被别的软件占用。
